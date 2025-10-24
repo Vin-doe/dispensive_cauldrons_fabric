@@ -3,7 +3,7 @@
 	"package": "com.example.dispensive_cauldrons.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ExampleMixin"
+      "ItemDispenserBehaviourMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
