@@ -95,7 +95,6 @@ public abstract class ItemDispenserBehaviourMixin {
             return;
         }
         BlockPos pos = pointer.pos();
-
         BlockState dispenserState = world.getBlockState(pos);
         DispenserBlockEntity dispenser = (DispenserBlockEntity)world.getBlockEntity(pos);
 
@@ -109,13 +108,14 @@ public abstract class ItemDispenserBehaviourMixin {
         if(stack.getItem() instanceof BucketItem bucketItem){
             if(bucketItem.getFluid() == Fluids.EMPTY){
                 if(cauldron.isFull(target)){
-                    stack.decrement(1);
                     ItemStack bucket = new ItemStack(getBucketType(cauldron, target), 1);
-                    if(stack.isEmpty()){
-                        stack = bucket.copy(); //fuckin idk, it would just delete the bucket if the stack becomes empty
+                    if(stack.getCount() == 1){
+                        stack = bucket;
                     }
-
-                    this.addStackOrSpawn(pointer, bucket);
+                    else{
+                        stack.decrement(1);
+                        this.addStackOrSpawn(pointer, bucket);
+                    }
 
                     world.setBlockState(targetPos, Blocks.CAULDRON.getDefaultState(), 3);
                 }
@@ -142,13 +142,15 @@ public abstract class ItemDispenserBehaviourMixin {
         }
         else if (stack.getItem() instanceof GlassBottleItem glassBottleItem){   //emptying cauldron with glass bottle
             if(getCauldronFluid(cauldron) == Fluids.WATER) {
-                stack.decrement(1);
                 ItemStack waterPotionItem = PotionContentsComponent.createStack(Items.POTION, Potions.WATER);
-                if(stack.isEmpty()){
-                    stack = waterPotionItem.copy();    //fuckin idk, it would just delete the water bottle if the stack becomes empty
-                }
 
-                this.addStackOrSpawn(pointer, waterPotionItem);
+                if(stack.getCount() == 1){
+                    stack = waterPotionItem;
+                }
+                else{
+                    stack.decrement(1);
+                    this.addStackOrSpawn(pointer, waterPotionItem);
+                }
 
                 int waterLevel = target.get(LeveledCauldronBlock.LEVEL) - 1;
                 if(waterLevel <= 0){
@@ -168,6 +170,15 @@ public abstract class ItemDispenserBehaviourMixin {
             }
             if(contents.potion().orElse(Potions.AWKWARD) == Potions.WATER){
                 if(getCauldronFluid(cauldron) == Fluids.EMPTY ||  getCauldronFluid(cauldron) == Fluids.WATER) {
+                    ItemStack bottleItem = new ItemStack(Items.GLASS_BOTTLE, 1);
+                    if(stack.getCount() == 1){
+                        stack = bottleItem;
+                    }
+                    else{
+                        stack.decrement(1);
+                        this.addStackOrSpawn(pointer, bottleItem);
+                    }
+
                     int waterLevel = 1;
                     if(cauldron instanceof LeveledCauldronBlock){
                         waterLevel = target.get(LeveledCauldronBlock.LEVEL) + 1;
