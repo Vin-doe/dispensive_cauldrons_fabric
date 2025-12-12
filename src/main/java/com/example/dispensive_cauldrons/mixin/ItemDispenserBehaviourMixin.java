@@ -1,17 +1,28 @@
 package com.example.dispensive_cauldrons.mixin;
 
-import net.minecraft.block.*;
-import net.minecraft.block.dispenser.ItemDispenserBehavior;
-import net.minecraft.block.entity.DispenserBlockEntity;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.PotionContentsComponent;
-import net.minecraft.fluid.Fluid;
-import net.minecraft.fluid.Fluids;
-import net.minecraft.item.*;
-import net.minecraft.potion.Potions;
-import net.minecraft.util.math.BlockPointer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.dispenser.BlockSource;
+import net.minecraft.core.dispenser.DefaultDispenseItemBehavior;
+import net.minecraft.world.item.BottleItem;
+import net.minecraft.world.item.BucketItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.SolidBucketItem;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.alchemy.Potions;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.AbstractCauldronBlock;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CauldronBlock;
+import net.minecraft.world.level.block.DispenserBlock;
+import net.minecraft.world.level.block.LayeredCauldronBlock;
+import net.minecraft.world.level.block.entity.DispenserBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.Fluids;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,13 +34,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 
 //   protected ItemStack dispenseSilently(BlockPointer pointer, ItemStack stack) {
-@Mixin(ItemDispenserBehavior.class)
+@Mixin(DefaultDispenseItemBehavior.class)
 public abstract class ItemDispenserBehaviourMixin {
     @Shadow
-    protected abstract void addStackOrSpawn(BlockPointer pointer, ItemStack stack);
+    protected abstract void addToInventoryOrDispense(BlockSource pointer, ItemStack stack);
 
     @Shadow
-    protected abstract ItemStack decrementStackWithRemainder(BlockPointer pointer, ItemStack stack, ItemStack remainder);
+    protected abstract ItemStack consumeWithRemainder(BlockSource pointer, ItemStack stack, ItemStack remainder);
 
     public final Logger LOGGER = LoggerFactory.getLogger("meow");
 
@@ -39,8 +50,8 @@ public abstract class ItemDispenserBehaviourMixin {
         if(cauldronBlock instanceof CauldronBlock) {
             return Items.BUCKET;
         }
-        else if (cauldronBlock instanceof LeveledCauldronBlock leveledCauldronBlock) {
-            if(state.isOf(Blocks.WATER_CAULDRON)) {
+        else if (cauldronBlock instanceof LayeredCauldronBlock leveledCauldronBlock) {
+            if(state.is(Blocks.WATER_CAULDRON)) {
                 return Items.WATER_BUCKET;
             }
             else { //Blocks.POWDER_SNOW_CAULDRON
@@ -57,7 +68,7 @@ public abstract class ItemDispenserBehaviourMixin {
         if(cauldronBlock instanceof CauldronBlock) {
             return Fluids.EMPTY;
         }
-        else if (cauldronBlock instanceof LeveledCauldronBlock) {
+        else if (cauldronBlock instanceof LayeredCauldronBlock) {
             return Fluids.WATER;
         }
         else{
@@ -68,37 +79,37 @@ public abstract class ItemDispenserBehaviourMixin {
     @Unique
     private static BlockState getCauldronBlockState(Fluid fluid) {
         if(fluid == Fluids.EMPTY) {
-            return Blocks.CAULDRON.getDefaultState();
+            return Blocks.CAULDRON.defaultBlockState();
         }
         else if (fluid == Fluids.WATER) {
-            return Blocks.WATER_CAULDRON.getDefaultState().with(LeveledCauldronBlock.LEVEL, LeveledCauldronBlock.MAX_LEVEL);
+            return Blocks.WATER_CAULDRON.defaultBlockState().setValue(LayeredCauldronBlock.LEVEL, LayeredCauldronBlock.MAX_FILL_LEVEL);
         }
         else {
-            return Blocks.LAVA_CAULDRON.getDefaultState();
+            return Blocks.LAVA_CAULDRON.defaultBlockState();
         }
     }
 
     @Unique
     private static int getSlot(DispenserBlockEntity dispenser, ItemStack stack) {
-        for (int i = 0; i < dispenser.size(); i++){
-            if (ItemStack.areItemsAndComponentsEqual(stack, dispenser.getStack(i))){
+        for (int i = 0; i < dispenser.getContainerSize(); i++){
+            if (ItemStack.isSameItemSameComponents(stack, dispenser.getItem(i))){
                 return i;
             }
         }
         return -1;
     }
 
-	@Inject(at = @At("HEAD"), method = "dispenseSilently", cancellable = true)
-	public void dispenseSilentlyMixin(BlockPointer pointer, ItemStack stack, CallbackInfoReturnable<ItemStack> cir) {
-        World world = pointer.world();
-        if (world.isClient()){
+	@Inject(at = @At("HEAD"), method = "execute", cancellable = true)
+	public void dispenseSilentlyMixin(BlockSource pointer, ItemStack stack, CallbackInfoReturnable<ItemStack> cir) {
+        Level world = pointer.level();
+        if (world.isClientSide()){
             return;
         }
         BlockPos pos = pointer.pos();
         BlockState dispenserState = world.getBlockState(pos);
         DispenserBlockEntity dispenser = (DispenserBlockEntity)world.getBlockEntity(pos);
 
-        BlockPos targetPos = pos.offset(dispenserState.get(DispenserBlock.FACING), 1);
+        BlockPos targetPos = pos.relative(dispenserState.getValue(DispenserBlock.FACING), 1);
         BlockState target = world.getBlockState(targetPos);
 
         if (!(target.getBlock() instanceof AbstractCauldronBlock cauldron)) {
@@ -106,65 +117,65 @@ public abstract class ItemDispenserBehaviourMixin {
         }
 
         if(stack.getItem() instanceof BucketItem bucketItem){
-            if(bucketItem.getFluid() == Fluids.EMPTY){
+            if(bucketItem.getContent() == Fluids.EMPTY){
                 if(cauldron.isFull(target)){
                     ItemStack bucket = new ItemStack(getBucketType(cauldron, target), 1);
                     if(stack.getCount() == 1){
                         stack = bucket;
                     }
                     else{
-                        stack.decrement(1);
-                        this.addStackOrSpawn(pointer, bucket);
+                        stack.shrink(1);
+                        this.addToInventoryOrDispense(pointer, bucket);
                     }
 
-                    world.setBlockState(targetPos, Blocks.CAULDRON.getDefaultState(), 3);
+                    world.setBlock(targetPos, Blocks.CAULDRON.defaultBlockState(), 3);
                 }
             }
             else{
-                if(getCauldronFluid(cauldron) == bucketItem.getFluid() || getCauldronFluid(cauldron) == Fluids.EMPTY) {
+                if(getCauldronFluid(cauldron) == bucketItem.getContent() || getCauldronFluid(cauldron) == Fluids.EMPTY) {
                     stack = new ItemStack(Items.BUCKET);
 
-                    world.setBlockState(targetPos, getCauldronBlockState(bucketItem.getFluid()), 3);
+                    world.setBlock(targetPos, getCauldronBlockState(bucketItem.getContent()), 3);
                 }
             }
             cir.setReturnValue(stack);
             cir.cancel();
         }
-        else if(stack.getItem() instanceof PowderSnowBucketItem powderSnowBucketItem){  //filling cauldron with powder snow bucket
+        else if(stack.getItem() instanceof SolidBucketItem powderSnowBucketItem){  //filling cauldron with powder snow bucket
             if(getCauldronFluid(cauldron) == Fluids.EMPTY) {
                 stack = new ItemStack(Items.BUCKET);
 
-                world.setBlockState(targetPos, Blocks.POWDER_SNOW_CAULDRON.getDefaultState().with(LeveledCauldronBlock.LEVEL, LeveledCauldronBlock.MAX_LEVEL), 3);
+                world.setBlock(targetPos, Blocks.POWDER_SNOW_CAULDRON.defaultBlockState().setValue(LayeredCauldronBlock.LEVEL, LayeredCauldronBlock.MAX_FILL_LEVEL), 3);
             }
 
             cir.setReturnValue(stack);
             cir.cancel();
         }
-        else if (stack.getItem() instanceof GlassBottleItem glassBottleItem){   //emptying cauldron with glass bottle
+        else if (stack.getItem() instanceof BottleItem glassBottleItem){   //emptying cauldron with glass bottle
             if(getCauldronFluid(cauldron) == Fluids.WATER) {
-                ItemStack waterPotionItem = PotionContentsComponent.createStack(Items.POTION, Potions.WATER);
+                ItemStack waterPotionItem = PotionContents.createItemStack(Items.POTION, Potions.WATER);
 
                 if(stack.getCount() == 1){
                     stack = waterPotionItem;
                 }
                 else{
-                    stack.decrement(1);
-                    this.addStackOrSpawn(pointer, waterPotionItem);
+                    stack.shrink(1);
+                    this.addToInventoryOrDispense(pointer, waterPotionItem);
                 }
 
-                int waterLevel = target.get(LeveledCauldronBlock.LEVEL) - 1;
+                int waterLevel = target.getValue(LayeredCauldronBlock.LEVEL) - 1;
                 if(waterLevel <= 0){
-                    world.setBlockState(targetPos, Blocks.CAULDRON.getDefaultState());
+                    world.setBlockAndUpdate(targetPos, Blocks.CAULDRON.defaultBlockState());
                 }
                 else{
-                    world.setBlockState(targetPos, target.with(LeveledCauldronBlock.LEVEL, waterLevel));
+                    world.setBlockAndUpdate(targetPos, target.setValue(LayeredCauldronBlock.LEVEL, waterLevel));
                 }
             }
             cir.setReturnValue(stack);
             cir.cancel();
         }
         else if(stack.getItem() instanceof PotionItem potionItem){  //filling cauldron with water bottle
-            PotionContentsComponent contents = stack.get(DataComponentTypes.POTION_CONTENTS);
+            PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
             if(contents == null){
                 return;
             }
@@ -175,19 +186,19 @@ public abstract class ItemDispenserBehaviourMixin {
                         stack = bottleItem;
                     }
                     else{
-                        stack.decrement(1);
-                        this.addStackOrSpawn(pointer, bottleItem);
+                        stack.shrink(1);
+                        this.addToInventoryOrDispense(pointer, bottleItem);
                     }
 
                     int waterLevel = 1;
-                    if(cauldron instanceof LeveledCauldronBlock){
-                        waterLevel = target.get(LeveledCauldronBlock.LEVEL) + 1;
+                    if(cauldron instanceof LayeredCauldronBlock){
+                        waterLevel = target.getValue(LayeredCauldronBlock.LEVEL) + 1;
                     }
                     //TODO: do some shit here with items
                     if(waterLevel > 3){
                         waterLevel = 3;
                     }
-                    world.setBlockState(targetPos, Blocks.WATER_CAULDRON.getDefaultState().with(LeveledCauldronBlock.LEVEL, waterLevel));
+                    world.setBlockAndUpdate(targetPos, Blocks.WATER_CAULDRON.defaultBlockState().setValue(LayeredCauldronBlock.LEVEL, waterLevel));
                 }
             }
             cir.setReturnValue(stack);
