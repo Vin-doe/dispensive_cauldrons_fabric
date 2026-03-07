@@ -3,9 +3,9 @@
 	"id": "dispensive_cauldrons",
 	"version": "${version}",
 	"name": "dispensive_cauldrons",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "Adds dispenser functionality to cauldrons.",
 	"authors": [
-		"Me!"
+		"Vin_doe"
 	],
 	"contact": {
 		"homepage": "https://fabricmc.net/",
@@ -31,7 +31,7 @@
 	],
 	"depends": {
 		"fabricloader": ">=0.17.3",
-		"minecraft": "~1.21.10",
+		"minecraft": "~1.21.11",
 		"java": ">=21",
 		"fabric-api": "*"
 	},
